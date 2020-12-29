@@ -11,17 +11,15 @@ async def check_update():
         gw = await fpl.get_gameweeks(return_json=True)
         df = pd.DataFrame(gw)
         today = datetime.now()
-        today_timestamp = today.timestamp()
-        df = df.loc[df.deadline_time_epoch>today_timestamp]
+        tomorrow=today + timedelta(days=1).timestamp()
+        today = today.timestamp()
+        df = df.loc[df.deadline_time_epoch>today]
         deadline = df.iloc[0].deadline_time_epoch
-        return deadline<today + timedelta(days=1).timestamp()
+        return deadline<tomorrow
 
 if __name__ == "__main__":
     if asyncio.run(check_update()):
-        email="conor.aspell@ucdconnect.ie"
-        password="team_mattata"
-        user_id="4340827"
-        # email=os.environ.get('EMAIL')
-        # password=os.environ.get('PASSWORD')
-        # user_id=os.environ.get('USER_ID')
+        email=os.environ.get('EMAIL')
+        password=os.environ.get('PASSWORD')
+        user_id=os.environ.get('USER_ID')
         asyncio.run(update(email, password,user_id))
