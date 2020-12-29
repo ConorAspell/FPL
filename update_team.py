@@ -1,8 +1,7 @@
 from fpl import FPL
 import aiohttp
 import asyncio
-import datetime
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 async def update(email, password,user_id):
     async with aiohttp.ClientSession() as session:
@@ -28,7 +27,7 @@ async def update(email, password,user_id):
         fixtures = pd.DataFrame(fixtures)
 
         picked_players = calc_fdr_diff(picked_players, fixtures)
-        player_out = calc_player_out(picked_players, fixtures)
+        picked_players, player_out = calc_player_out(picked_players, fixtures)
 
         budget = user.last_deadline_bank+player_out.now_cost.iloc[0]
         dups_team = picked_players.pivot_table(index=['team'], aggfunc='size')
@@ -47,24 +46,54 @@ async def update(email, password,user_id):
         df = df.loc[df.element_type==player_out.element_type.iloc[0]]
 
         rows_to_drop=player_out.index.values.astype(int)[0]
-        picked_players.drop(rows_to_drop, inplace=True)
+        picked_players=picked_players.drop(rows_to_drop)
 
         df = calc_fdr_diff(df, fixtures)
         player_in = calc_player_in(df, fixtures)
 
-        transfer= await user.transfer(player_out.id.tolist(), player_in.id.tolist())
+        # transfer= await user.transfer(player_out.id.tolist(), player_in.id.tolist())
+        player_in['id'] =player_out['id'].iloc[0]
+
+        player_in, player_in2=calc_player_out(player_in, fixtures)
+        picked_players=picked_players.append(player_in)
+        players_to_sub_in, players_to_sub_out = calc_subs(picked_players, players[0:11], players[11:15])
+        for i in range(0, len(players_to_sub_in)):
+            try:
+                s = await user.substitute([players_to_sub_in[i]],[players_to_sub_out[i]])
+            except:
+                print("might've failed idk")
 
         captain=picked_players.sort_values(by=['weight']).iloc[0].id
 
+def calc_subs(picked_players, current_starters, current_subs):
 
+    goalkeepers=picked_players.loc[(picked_players.element_type=="") | (picked_players.element_type==1)]
+    outfield = picked_players.loc[(picked_players.element_type!="G") & (picked_players.element_type!=1)]
+    goalie = goalkeepers.sort_values(by=['weight']).iloc[0].id
+    goalie_out = goalkeepers.sort_values(by=['weight']).iloc[1].id
+    squad = outfield.sort_values(by=['weight']).iloc[0:10].id.tolist()
+    squad.append(goalie)
+    
+    players_to_sub_in = []
+    players_to_sub_out = []
+    for player in picked_players.id.tolist():
+        if player in squad and player in current_subs:
+            players_to_sub_in.append(player)
+        if player not in squad and player in current_starters:
+            players_to_sub_out.append(player)
+    return players_to_sub_in, players_to_sub_out
 
 def calc_fdr_diff(players, fixes):
     fixes = fixes[['team_a', "team_h", "team_h_difficulty", "team_a_difficulty"]]
     away_df = pd.merge(players, fixes, how="inner", left_on=["team"], right_on=["team_a"])
     home_df = pd.merge(players, fixes, how="inner", left_on=["team"], right_on=["team_h"])
-    away_df['fdr'] = away_df['team_a_difficulty']-home_df['team_h_difficulty']-1
-    home_df['fdr'] = home_df['team_h_difficulty']-home_df['team_a_difficulty']+1
+    if not away_df.empty:
+        away_df['fdr'] = away_df['team_a_difficulty']-home_df['team_h_difficulty']-1
+    if not home_df.empty:
+        home_df['fdr'] = home_df['team_h_difficulty']-home_df['team_a_difficulty']+1
     df = away_df.append(home_df)
+    df = df.drop(['team_a', "team_h", "team_h_difficulty", "team_a_difficulty"], axis=1)
+    df.index = range(15)
     return df
 
 def calc_player_out(players, fixtures):
@@ -87,7 +116,7 @@ def calc_player_out(players, fixtures):
             weight = 0
         x[1]['weight'] = weight
         df1 = df1.append(x[1])
-    return df1.sample(1, weights=df1.weight)
+    return df1, df1.sample(1, weights=df1.weight)
 
 def calc_player_in(df, fixtures):
     df1 = pd.DataFrame(columns=df.columns.tolist())
