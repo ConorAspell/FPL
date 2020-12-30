@@ -32,9 +32,7 @@ async def update(email, password,user_id):
         budget = user.last_deadline_bank+player_out.now_cost.iloc[0]
         dups_team = picked_players.pivot_table(index=['team'], aggfunc='size')
         invalid_teams = dups_team.loc[dups_team==3].index.tolist()
-
-
-        
+       
         potential_players = await fpl.get_players()
 
         player_dict = [dict(vars(x)) for x in potential_players]
@@ -51,17 +49,14 @@ async def update(email, password,user_id):
         df = calc_fdr_diff(df, fixtures)
         player_in = calc_player_in(df, fixtures)
 
-        # transfer= await user.transfer(player_out.id.tolist(), player_in.id.tolist())
+        transfer= await user.transfer(player_out.id.tolist(), player_in.id.tolist())
         player_in['id'] =player_out['id'].iloc[0]
 
-        player_in, player_in2=calc_player_out(player_in, fixtures)
+        player_in, null_value=calc_player_out(player_in, fixtures) #dont need the player out
         picked_players=picked_players.append(player_in)
         players_to_sub_in, players_to_sub_out = calc_subs(picked_players, players[0:11], players[11:15])
         for i in range(0, len(players_to_sub_in)):
-            try:
-                s = await user.substitute([players_to_sub_in[i]],[players_to_sub_out[i]])
-            except:
-                print("might've failed idk")
+            s = await user.substitute([players_to_sub_in[i]],[players_to_sub_out[i]])
 
         captain=picked_players.sort_values(by=['weight']).iloc[0].id
 
@@ -93,7 +88,7 @@ def calc_fdr_diff(players, fixes):
         home_df['fdr'] = home_df['team_h_difficulty']-home_df['team_a_difficulty']+1
     df = away_df.append(home_df)
     df = df.drop(['team_a', "team_h", "team_h_difficulty", "team_a_difficulty"], axis=1)
-    df.index = range(15)
+    df.index = range(len(df))
     return df
 
 def calc_player_out(players, fixtures):
@@ -113,7 +108,7 @@ def calc_player_out(players, fixtures):
         if x[1]['id'] in ps_playing_twice['id']:
             weight -=25
         if weight < 0:
-            weight = 0
+            weight = 0.01
         x[1]['weight'] = weight
         df1 = df1.append(x[1])
     return df1, df1.sample(1, weights=df1.weight)
