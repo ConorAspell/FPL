@@ -19,11 +19,7 @@ async def check_update():
 
 if __name__ == "__main__":
     if asyncio.run(check_update()):
-        
         email=os.environ.get('EMAIL')
         password=os.environ.get('PASSWORD')
         user_id=os.environ.get('USER_ID')
-        email="conor.aspell@ucdconnect.ie"
-        password="team_mattata"
-        user_id="4340827"
         asyncio.run(update(email, password,user_id))
